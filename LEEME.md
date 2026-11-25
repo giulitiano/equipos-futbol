@@ -6,7 +6,7 @@ App para el celular que arma equipos parejos y aleatorios según el nivel de cad
 1. **Inicio**: tarjetas con tus equipos (ej: "Los martes"). Tocá **+ Nuevo equipo** para crear otro (nombre y color).
 2. **Dentro de un equipo**: cargá jugadores con 7 habilidades de 1 a 5 ⭐ (velocidad, regate, pase, definición, defensa, resistencia, atajada).
    Con el buscador 🔍 podés sumar jugadores que ya tenés cargados en otros equipos.
-3. **⚽ Armar equipos**: elegí F5, F6 u F8, marcá quién viene y tocá **Armar**.
+3. **⚽ Armar equipos**: elegí F5, F6 u F8, marcá quién viene y tocá **Armar**. Con **Agregar invitado** sumás a alguien que juega sólo ese día (nivel promedio si no sabés cómo juega).
 4. **Resultado**: equipos parejos por nivel, habilidad y posición (ARQ/DEF/MED/DEL). 🔒 fija un jugador, **Re-sortear** da otra combinación, **Imagen** genera los equipos parados en una cancha (Claros vs Oscuros) para mandar por WhatsApp; también se pueden compartir como texto.
    **Cuentas de la cancha**: total, cuánto pone cada uno, quién pagó, alias y recordatorio. En **Partidos** ves quién debe.
 5. **Cargar resultado**: fecha, cancha, marcador, goles de cada jugador y la figura 🏆. Queda en la pestaña **Partidos** y suma al **Ranking** (goleadores, figuras, % de ganados).

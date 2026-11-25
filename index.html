@@ -278,6 +278,15 @@
   .coin-legend i{width:14px;height:14px;border-radius:50%;display:inline-block}
   .coin-res{text-align:center;font-size:1.3rem;font-weight:900;min-height:2.2em;margin:4px 0 0}
   .coin-res small{display:block;font-size:.85rem;font-weight:500;color:var(--mut)}
+  .pos-INV{background:#3f3f46;color:#e4e4e7}
+  .att li.guest{background:linear-gradient(90deg,#3f3f4622,transparent)}
+  .gbtn{background:none;border:1px solid var(--line);border-radius:10px;width:38px;height:38px;min-height:38px;padding:0;display:grid;place-items:center;color:var(--mut);flex:none}
+  .gbtn .ic{margin:0;width:18px;height:18px}
+  .lvls{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:10px}
+  .lvls button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 2px;font-weight:700;font-size:.85rem;min-height:56px}
+  .lvls button small{font-weight:500;font-size:.68rem;color:var(--mut)}
+  .lvls button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+  .lvls button.on small{color:#dcfce7}
   .view{animation:in .18s ease-out}
   @keyframes in{from{opacity:0;transform:translateY(6px)}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -426,6 +435,7 @@
         </div>
       </div>
       <ul class="list att" id="attList"></ul>
+      <button class="btn-big" id="addGuest" style="margin-top:8px"><svg class="ic"><use href="#i-plus"/></svg>Agregar invitado</button>
     </div>
   </section>
 
@@ -472,6 +482,20 @@
     <button class="grow hidden" id="pDel" style="color:var(--bad)">Quitar</button>
     <button class="grow" id="pCancel">Cancelar</button>
     <button class="grow btn-acc" id="pSave">Guardar</button>
+  </div>
+</dialog>
+
+<!-- Invitado -->
+<dialog id="guestDlg">
+  <h2>Agregar invitado</h2>
+  <p class="muted" style="margin:0 0 10px">Juega sólo hoy. No aparece en el plantel ni en el ranking.</p>
+  <input type="text" id="guestName" maxlength="30" placeholder="Nombre (ej: Amigo de Nico)" autocomplete="off">
+  <p class="muted" style="margin:14px 0 0">¿Cómo juega?</p>
+  <div class="lvls" id="guestLvl"></div>
+  <div class="posbtns" id="guestPos" style="margin-top:10px"></div>
+  <div class="row" style="margin-top:14px">
+    <button class="grow" id="guestCancel">Cancelar</button>
+    <button class="grow btn-acc" id="guestOk">Agregar</button>
   </div>
 </dialog>
 
@@ -579,13 +603,14 @@
   // ---------- Estado ----------
   // Jugadores en un listado general; cada equipo guarda sus miembros y si confirmaron: members = {id: true/false}
   const POS = {ARQ:'Arquero', DEF:'Defensor', MED:'Medio', DEL:'Delantero'};
-  const posTag = p => p.pos ? `<span class="pos pos-${p.pos}">${p.pos}</span>` : '';
+  const posTag = p => (p.guest ? `<span class="pos pos-INV" title="Invitado">INV</span>` : '') + (p.pos ? `<span class="pos pos-${p.pos}">${p.pos}</span>` : '');
   function newPlayer(name, pos, s){ return {id:uid(), name, pos, gk:pos==='ARQ', s}; }
   function fixPlayer(p){
     const lvl = p.level ? clamp(p.level) : 3;
     const s = {}; STATS.forEach(st => s[st.k] = clamp(p.s?.[st.k] ?? (st.k==='ata' ? (p.gk?lvl:2) : lvl)));
     const pos = POS[p.pos] ? p.pos : (p.gk ? 'ARQ' : '');
     const out = {id:p.id||uid(), name:String(p.name).slice(0,30), pos, gk:pos==='ARQ', s};
+    if(p.guest) out.guest = true;
     if(typeof p.photo==='string' && p.photo.startsWith('data:image/')) out.photo = p.photo;
     return out;
   }
@@ -660,7 +685,7 @@
   // ---------- Inicio ----------
   function renderHome(){
     const cards = state.groups.map(g => {
-      const r = roster(g), avg = r.length ? r.reduce((s,p)=>s+ovr(p),0)/r.length : 0;
+      const r = roster(g).filter(p=>!p.guest), avg = r.length ? r.reduce((s,p)=>s+ovr(p),0)/r.length : 0;
       const lm = (g.matches||[]).map(m=>m.date).sort().pop();
       const last = lm ? `Último partido: ${fdate(lm)}` : g.teams?.date ? `Último sorteo: F${g.teams.format} · ${ago(g.teams.date)}` : 'Sin partidos todavía';
       return `<button class="gcard" data-g="${g.id}" style="--gc:${g.color}">
@@ -785,7 +810,7 @@
   $('pName').addEventListener('input', () => {
     const box = $('pSuggest'), q = norm($('pName').value);
     if(editing || q.length<2){ box.classList.add('hidden'); return; }
-    const m = state.players.filter(p => !(p.id in G().members) && norm(p.name).includes(q)).slice(0,4);
+    const m = state.players.filter(p => !p.guest && !(p.id in G().members) && norm(p.name).includes(q)).slice(0,4);
     if(!m.length){ box.classList.add('hidden'); return; }
     box.innerHTML = `<div class="sugg"><div class="muted">¿Es alguno de estos? Ya está cargado:</div><ul class="list">${m.map(p=>`
       <li>${ovrBox(p,'sm')}<div class="pinfo"><div class="pnm">${esc(p.name)}</div><div class="mini">${esc(groupsOf(p).map(g=>g.name).join(', ')||'sin equipo')}</div></div>
@@ -862,7 +887,7 @@
   }
   function renderRanking(g){
     const box = $('gt-ranking'), st = groupStats(g);
-    const rows = roster(g).map(p => ({p, s: st[p.id] || {pj:0,pg:0,pe:0,pp:0,goles:0,mvp:0}}));
+    const rows = roster(g).filter(p=>!p.guest).map(p => ({p, s: st[p.id] || {pj:0,pg:0,pe:0,pp:0,goles:0,mvp:0}}));
     const keys = {goles:'Goles', mvp:'Figuras', pg:'Ganados', pj:'Jugados'};
     rows.sort((a,b)=> b.s[rkSort]-a.s[rkSort] || b.s.goles-a.s.goles || b.s.pg-a.s.pg || a.p.name.localeCompare(b.p.name));
     const nm = (g.matches||[]).length;
@@ -885,7 +910,7 @@
   }
 
   function renderGroup(){
-    const g = G(), all = roster(g), q = norm($('search').value);
+    const g = G(), all = roster(g).filter(p=>!p.guest), q = norm($('search').value);
     setAdj(g);
     document.querySelectorAll('#gTabs [data-gt]').forEach(b => b.classList.toggle('on', b.dataset.gt===gtab));
     ['plantel','partidos','ranking'].forEach(t => $('gt-'+t).classList.toggle('hidden', t!==gtab));
@@ -897,7 +922,7 @@
     if(g.teams) $('goLast').innerHTML = ic('eye')+`Ver últimos equipos (F${g.teams.format}${g.teams.date?' · '+ago(g.teams.date):''})`;
     $('countPlayers').textContent = all.length;
     const ul = $('playerList');
-    const others = q ? state.players.filter(p => !(p.id in g.members) && norm(p.name).includes(q)) : [];
+    const others = q ? state.players.filter(p => !p.guest && !(p.id in g.members) && norm(p.name).includes(q)) : [];
     $('otherCard').classList.toggle('hidden', !others.length);
     $('otherList').innerHTML = others.map(p => `
       <li>${ovrBox(p)}<div class="pinfo"><div class="pnm">${esc(p.name)}${posTag(p)}</div>
@@ -949,6 +974,42 @@
     g.links.push({id:uid(), a, b, t:rType});
     save(); $('ruleDlg').close(); renderRules(g); toast('Pareja guardada');
   };
+  // ---------- Invitados ----------
+  const GUEST_LVLS = [['', 'No sé', 'promedio'], [2, 'Flojo', '2'], [3, 'Normal', '3'], [4, 'Bueno', '4'], [5, 'Crack', '5']];
+  let gLvl = '', gPos = '';
+  function paintGuest(){
+    $('guestLvl').innerHTML = GUEST_LVLS.map(([v,n,s])=>`<button type="button" data-gl="${v}" class="${String(v)===String(gLvl)?'on':''}">${n}<small>${s}</small></button>`).join('');
+    $('guestLvl').querySelectorAll('[data-gl]').forEach(b => b.onclick = () => { gLvl = b.dataset.gl; paintGuest(); });
+    $('guestPos').innerHTML = POS_BTNS.map(([k,n])=>`<button type="button" data-gp="${k}" class="${k===gPos?'on':''}">${k||'—'}<small>${n}</small></button>`).join('');
+    $('guestPos').querySelectorAll('[data-gp]').forEach(b => b.onclick = () => { gPos = b.dataset.gp; paintGuest(); });
+  }
+  $('addGuest').onclick = () => {
+    const n = roster().filter(p=>p.guest).length + 1;
+    $('guestName').value = ''; $('guestName').placeholder = `Invitado ${n}`; gLvl = ''; gPos = ''; paintGuest();
+    $('guestDlg').showModal(); $('guestName').focus();
+  };
+  $('guestCancel').onclick = () => $('guestDlg').close();
+  $('guestOk').onclick = () => {
+    const g = G(), base = roster(g).filter(p=>!p.guest);
+    const name = $('guestName').value.trim() || $('guestName').placeholder;
+    const s = {};
+    STATS.forEach(st => {
+      if(gLvl!=='') s[st.k] = st.k==='ata' ? (gPos==='ARQ' ? +gLvl : 2) : +gLvl;
+      else s[st.k] = base.length ? Math.round(base.reduce((a,p)=>a+p.s[st.k],0)/base.length*10)/10 : (st.k==='ata'?2:3);
+    });
+    if(gPos==='ARQ' && gLvl==='') s.ata = Math.max(3, s.ata);
+    const p = {id:uid(), name, pos:gPos, gk:gPos==='ARQ', s, guest:true};
+    state.players.push(p); g.members[p.id] = true;
+    save(); $('guestDlg').close(); renderMatch(); toast(`${name} agregado como invitado (nivel ${fmt(ovr(p))})`);
+  };
+  $('guestName').addEventListener('keydown', e => { if(e.key==='Enter') $('guestOk').click(); });
+  function removeGuest(id){
+    const g = G(); delete g.members[id];
+    const used = state.groups.some(x => (x.matches||[]).some(m => m.teams.some(t=>t.includes(id))));
+    if(!used && !groupsOf(P(id)||{id}).length) state.players = state.players.filter(p=>p.id!==id);
+    save(); renderMatch();
+  }
+
   function renderMatch(){
     const g = G(), ul = $('attList'), all = roster(g), n = confirmed(g).length, need = g.format*2;
     setAdj(g); $('useForm').checked = g.useForm!==false; $('noRepeat').checked = g.noRepeat!==false; renderRules(g);
@@ -968,12 +1029,15 @@
     $('buildBtn').innerHTML = n<need ? (need-n===1 ? 'Falta 1 jugador' : `Faltan ${need-n} jugadores`) : ic('shuffle')+`Armar equipos (${n})`;
     $('buildBtn').disabled = n<need; $('buildBtn').style.opacity = n<need?.5:1;
     if(!all.length){ ul.innerHTML = '<div class="empty">Este equipo no tiene jugadores todavía.</div>'; return; }
-    ul.innerHTML = all.sort((a,b)=>a.name.localeCompare(b.name)).map(p => `
-      <li data-id="${p.id}" class="${isPresent(p)?'on':''}">
+    ul.innerHTML = all.sort((a,b)=>(!!a.guest-!!b.guest) || a.name.localeCompare(b.name)).map(p => `
+      <li data-id="${p.id}" class="${isPresent(p)?'on':''} ${p.guest?'guest':''}">
         <span class="check">${isPresent(p)?ic('check'):''}</span>
         <span class="pnm grow">${esc(p.name)}${posTag(p)}</span>${effBox(p,'sm')}
+        ${p.guest?`<button class="gbtn" data-keep="${p.id}" aria-label="Pasar al plantel" title="Pasar al plantel">${ic('users')}</button><button class="gbtn" data-rmg="${p.id}" aria-label="Quitar invitado" title="Quitar invitado">${ic('x')}</button>`:''}
       </li>`).join('');
     ul.querySelectorAll('li').forEach(li => li.onclick = () => { g.members[li.dataset.id] = !g.members[li.dataset.id]; save(); renderMatch(); });
+    ul.querySelectorAll('[data-rmg]').forEach(b => b.onclick = e => { e.stopPropagation(); removeGuest(b.dataset.rmg); });
+    ul.querySelectorAll('[data-keep]').forEach(b => b.onclick = e => { e.stopPropagation(); const p = P(b.dataset.keep); delete p.guest; p.s = Object.fromEntries(STATS.map(s=>[s.k, clamp(p.s[s.k])])); save(); renderMatch(); toast(p.name+' pasó al plantel: completá sus estrellas'); openPlayer(p.id); });
   }
   document.querySelectorAll('#types .type').forEach(b => b.onclick = () => { G().format = +b.dataset.f; save(); renderMatch(); });
   $('allBtn').onclick = () => { const g=G(); Object.keys(g.members).forEach(id=>g.members[id]=true); save(); renderMatch(); };
