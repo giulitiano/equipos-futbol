@@ -68,8 +68,8 @@
   .list{list-style:none;margin:0;padding:0}
   .list li{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)}
   .list li:last-child{border-bottom:none}
-  .pinfo{flex:1;min-width:0}
-  .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pinfo{flex:1;min-width:0;text-align:left}
+  .pnm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;color:var(--txt);font-size:1rem;font-weight:500}
   .mini{font-size:.75rem;color:var(--mut);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tag{font-size:.68rem;padding:2px 7px;border-radius:999px;background:#1e3a8a;color:#bfdbfe;margin-left:6px;vertical-align:middle}
   .ovr{flex:none;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-weight:800;font-size:1.05rem;color:#08130d}
@@ -111,7 +111,7 @@
   .check{width:26px;height:26px;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;flex:none;color:#fff}
   .check .ic{width:18px;height:18px;stroke-width:3}
   .att li.on .check{background:var(--acc);border-color:var(--acc)}
-  .att li:not(.on) .name{color:var(--mut)}
+  .att li:not(.on) .pnm{color:var(--mut)}
   .cta-bar{position:fixed;left:0;right:0;bottom:0;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(180deg,transparent,var(--bg) 30%);z-index:6}
   .cta-bar button{max-width:652px;margin:0 auto;display:block}
   .ok{color:var(--acc)} .warn{color:var(--warn)}
@@ -788,7 +788,7 @@
     const m = state.players.filter(p => !(p.id in G().members) && norm(p.name).includes(q)).slice(0,4);
     if(!m.length){ box.classList.add('hidden'); return; }
     box.innerHTML = `<div class="sugg"><div class="muted">¿Es alguno de estos? Ya está cargado:</div><ul class="list">${m.map(p=>`
-      <li>${ovrBox(p,'sm')}<div class="pinfo"><div class="name">${esc(p.name)}</div><div class="mini">${esc(groupsOf(p).map(g=>g.name).join(', ')||'sin equipo')}</div></div>
+      <li>${ovrBox(p,'sm')}<div class="pinfo"><div class="pnm">${esc(p.name)}</div><div class="mini">${esc(groupsOf(p).map(g=>g.name).join(', ')||'sin equipo')}</div></div>
       <button class="add-ex" data-add="${p.id}">+ Agregar</button></li>`).join('')}</ul></div>`;
     box.classList.remove('hidden');
     box.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { $('playerDlg').close(); addToGroup(P(b.dataset.add)); });
@@ -846,7 +846,7 @@
     const box = $('gt-partidos'), ms = [...(g.matches||[])].sort((a,b)=> b.date.localeCompare(a.date) || b.created-a.created);
     if(!ms.length){ box.innerHTML = `<div class="card empty">Todavía no hay partidos cargados.<br>Armá los equipos y, después de jugar, tocá <b>Cargar resultado</b>.</div>`; return; }
     const dl = debts(g);
-    box.innerHTML = (dl.length ? `<div class="card"><h2>${ic('cash')} Deben</h2><ul class="list debt">${dl.map(([id,o])=>`<li><div class="pinfo"><div class="name">${esc(pname(id))}</div><div class="mini">${o.n} partido${o.n===1?'':'s'} sin pagar</div></div><b class="money" style="color:#f87171">${ARS(o.amt)}</b></li>`).join('')}</ul>
+    box.innerHTML = (dl.length ? `<div class="card"><h2>${ic('cash')} Deben</h2><ul class="list debt">${dl.map(([id,o])=>`<li><div class="pinfo"><div class="pnm">${esc(pname(id))}</div><div class="mini">${o.n} partido${o.n===1?'':'s'} sin pagar</div></div><b class="money" style="color:#f87171">${ARS(o.amt)}</b></li>`).join('')}</ul>
       <button class="btn-big" id="debtRemind" style="margin-top:8px">${ic('bell')}Recordar a todos</button></div>` : '') + ms.map(m => `
       <button class="match" data-m="${m.id}">
         <div class="top"><span class="row" style="gap:6px">${ic('calendar')}${esc(fdate(m.date))}${m.place?` · ${esc(m.place)}`:''}</span><span>F${m.format}</span></div>
@@ -872,7 +872,7 @@
       ${!nm?'<div class="empty">Cuando cargues resultados vas a ver acá goleadores, figuras y quién gana más.</div>':
       `<ul class="list">${rows.map((r,i)=>`<li data-pf="${r.p.id}" style="cursor:pointer">
         <span class="rk ${i<3 && r.s[rkSort]>0?'top':''}">${i+1}</span>
-        <div class="pinfo"><div class="name">${esc(r.p.name)}${posTag(r.p)}</div>
+        <div class="pinfo"><div class="pnm">${esc(r.p.name)}${posTag(r.p)}</div>
         <div class="mini">${r.s.pj?`${r.s.pg}G · ${r.s.pe}E · ${r.s.pp}P`:'Sin partidos'}</div></div>
         <div class="rstats">
           <div class="${rkSort==='goles'&&r.s.goles?'hl':''}"><b>${r.s.goles}</b><small>goles</small></div>
@@ -900,7 +900,7 @@
     const others = q ? state.players.filter(p => !(p.id in g.members) && norm(p.name).includes(q)) : [];
     $('otherCard').classList.toggle('hidden', !others.length);
     $('otherList').innerHTML = others.map(p => `
-      <li>${ovrBox(p)}<div class="pinfo"><div class="name">${esc(p.name)}${posTag(p)}</div>
+      <li>${ovrBox(p)}<div class="pinfo"><div class="pnm">${esc(p.name)}${posTag(p)}</div>
         <div class="mini">${esc(groupsOf(p).map(x=>x.name).join(', ')||'sin equipo')}</div></div>
         <button class="add-ex" data-add="${p.id}">+ Agregar</button></li>`).join('');
     $('otherList').querySelectorAll('[data-add]').forEach(b => b.onclick = () => { $('search').value=''; addToGroup(P(b.dataset.add)); });
@@ -913,7 +913,7 @@
     else arr.sort((a,b)=>b.s[k]-a.s[k] || ovr(b)-ovr(a));
     ul.innerHTML = arr.map(p => `
       <li data-id="${p.id}" style="cursor:pointer">${ovrBox(p)}
-        <div class="pinfo"><div class="name">${esc(p.name)}${posTag(p)}${trendTag(p)}</div><div class="mini">${miniStats(p)}</div></div>
+        <div class="pinfo"><div class="pnm">${esc(p.name)}${posTag(p)}${trendTag(p)}</div><div class="mini">${miniStats(p)}</div></div>
         <button class="icon-btn icon-only" data-edit="${p.id}" aria-label="Editar">${ic('edit')}</button></li>`).join('');
     ul.querySelectorAll('li').forEach(li => li.onclick = () => openProfile(li.dataset.id));
     ul.querySelectorAll('[data-edit]').forEach(b => b.onclick = e => { e.stopPropagation(); openPlayer(b.dataset.edit); });
@@ -971,7 +971,7 @@
     ul.innerHTML = all.sort((a,b)=>a.name.localeCompare(b.name)).map(p => `
       <li data-id="${p.id}" class="${isPresent(p)?'on':''}">
         <span class="check">${isPresent(p)?ic('check'):''}</span>
-        <span class="name grow">${esc(p.name)}${posTag(p)}</span>${effBox(p,'sm')}
+        <span class="pnm grow">${esc(p.name)}${posTag(p)}</span>${effBox(p,'sm')}
       </li>`).join('');
     ul.querySelectorAll('li').forEach(li => li.onclick = () => { g.members[li.dataset.id] = !g.members[li.dataset.id]; save(); renderMatch(); });
   }
@@ -1141,7 +1141,7 @@
           <ul>${t.map((p,j)=>`<li>
             <button class="lock ${locks[p.id]!=null?'on':''}" data-lock="${p.id}" data-t="${i}" aria-label="Fijar">${ic(locks[p.id]!=null?'lock':'unlock')}</button>
             ${effBox(p,'sm')}
-            <div class="pinfo"><div class="name">${esc(p.name)}${p===gk?`<span class="tag">${ic('ata')}arco</span>`:posTag(p)}${j>=k?' <span class="muted">(suplente)</span>':''}</div>
+            <div class="pinfo"><div class="pnm">${esc(p.name)}${p===gk?`<span class="tag">${ic('ata')}arco</span>`:posTag(p)}${j>=k?' <span class="muted">(suplente)</span>':''}</div>
             <div class="mini">${miniStats(p)}</div></div></li>`).join('')}
           </ul>
           ${!t.some(p=>p.gk)?`<div class="gkline">Sin arquero fijo: al arco va ${esc(gk.name)} (atajada ${gk.s.ata}/5)</div>`:''}
@@ -1435,7 +1435,7 @@
       ${pm.length ? `<div class="card"><h2>Historial</h2><ul class="list hist">${pm.map(x=>{
           const s = SIDES[x.ti%SIDES.length], m = x.m;
           return `<li data-m="${m.id}"><span class="rs rs-${x.res}">${x.res}</span>
-            <div class="pinfo"><div class="name">${m.teams.map((_,i)=>`${i===x.ti?'<b>':''}${m.score[i]}${i===x.ti?'</b>':''}`).join(' – ')} <span class="muted">con ${s.name}</span></div>
+            <div class="pinfo"><div class="pnm">${m.teams.map((_,i)=>`${i===x.ti?'<b>':''}${m.score[i]}${i===x.ti?'</b>':''}`).join(' – ')} <span class="muted">con ${s.name}</span></div>
             <div class="mini">${esc(fdate(m.date))}${m.place?' · '+esc(m.place):''}</div></div>
             <span class="row" style="gap:6px;flex:none">${x.goals?`<span class="row" style="gap:3px">${ic('ball','s-tir')}<b>${x.goals}</b></span>`:''}${x.mvp?ic('trophy','s-vel'):''}</span></li>`; }).join('')}</ul></div>` : ''}
       ${others.length ? `<p class="muted center">También juega en: ${esc(others.join(', '))}</p>` : ''}`;
@@ -1535,7 +1535,7 @@
       <div class="team-h" style="background:${s.bg};color:${s.fg}"><span>${s.name}</span><span>${teamGoals(i)} gol${teamGoals(i)===1?'':'es'} cargados</span></div>
       <ul>${ids.map(id => `<li>
         <button class="mvp ${draft.mvp===id?'on':''}" data-mvp="${id}" aria-label="Figura">${ic('trophy')}</button>
-        <div class="pinfo"><div class="name">${esc(pname(id))}${P(id)?posTag(P(id)):''}</div></div>
+        <div class="pinfo"><div class="pnm">${esc(pname(id))}${P(id)?posTag(P(id)):''}</div></div>
         <span class="stepper"><button data-g="${id}" data-t="${i}" data-d="-1" aria-label="Restar gol">${ic('minus')}</button><b>${draft.goals[id]||0}</b><button data-g="${id}" data-t="${i}" data-d="1" aria-label="Sumar gol">${ic('ball')}</button></span>
       </li>`).join('')}</ul></div>`; }).join('');
     $('mScore').querySelectorAll('[data-sc]').forEach(b => b.onclick = () => {
