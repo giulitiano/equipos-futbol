@@ -287,6 +287,19 @@
   .lvls button small{font-weight:500;font-size:.68rem;color:var(--mut)}
   .lvls button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
   .lvls button.on small{color:#dcfce7}
+  .mrow li{flex-wrap:wrap;row-gap:4px}
+  .mrow .ctrls{width:100%;display:flex;justify-content:flex-end;gap:12px;padding-left:48px;align-items:center}
+  .mrow .ctrls label{font-size:.72rem;color:var(--mut);margin-right:2px}
+  .kp{background:none;border:1px solid transparent;width:40px;height:40px;min-height:40px;padding:0;display:grid;place-items:center;color:var(--mut);opacity:.5;flex:none}
+  .kp .ic{margin:0;width:20px;height:20px}
+  .kp.on{color:#4ade80;border-color:#4ade80;opacity:1;background:#14532d55}
+  .ptsinfo summary{cursor:pointer;color:var(--acc);font-size:.88rem;padding:6px 0;list-style:none}
+  .ptsinfo summary::-webkit-details-marker{display:none}
+  .ptsinfo table{width:100%;border-collapse:collapse;font-size:.85rem;margin:6px 0}
+  .ptsinfo td{padding:6px 4px;border-bottom:1px solid var(--line)}
+  .ptsinfo td:last-child{text-align:right;font-weight:800;white-space:nowrap}
+  .ptsinfo p{font-size:.82rem;color:var(--mut);margin:8px 0}
+  .ptag{font-size:.75rem;font-weight:800;color:var(--gold);white-space:nowrap}
   .view{animation:in .18s ease-out}
   @keyframes in{from{opacity:0;transform:translateY(6px)}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -448,7 +461,7 @@
       </div>
     </div>
     <div class="card" id="mScore"></div>
-    <p class="muted center" style="margin:-2px 0 12px">Sumá los goles de cada jugador y tocá el trofeo para elegir la figura.</p>
+    <p class="muted center" style="margin:-2px 0 12px">Cargá goles y asistencias, marcá con el guante quién atajó en cada equipo y tocá el trofeo para elegir la figura.</p>
     <div id="mTeams"></div>
     <div class="card" id="mPay"></div>
     <button class="btn-big hidden" id="mDel" style="color:var(--bad)">Borrar partido</button>
@@ -844,11 +857,39 @@
   $('goMatch').onclick = () => go('partido');
   $('goLast').onclick = () => go('resultado');
   const miniStats = p => STATS.map(st=>`<span class="st">${st.i}${p.s[st.k]}</span>`).join('');
-  let gtab = 'plantel', rkSort = 'goles';
+  let gtab = 'plantel', rkSort = 'pts';
   document.querySelectorAll('#gTabs [data-gt]').forEach(b => b.onclick = () => { gtab = b.dataset.gt; renderGroup(); });
+  // ---------- Sistema de puntos ----------
+  const PTS = {pj:1, win:3, draw:1, gol:2, asist:1, mvp:3, valla:3, gc:-0.5};
+  const keeperId = ids => { const t = ids.map(P).filter(Boolean); return t.length ? keeper(t).id : null; };
+  // nivel promedio de cada equipo en ese partido (guardado al cargar; si es un partido viejo, se estima con el nivel actual)
+  const matchLvl = m => m.lvl || m.teams.map(t => { const ps = t.map(P).filter(Boolean); return ps.length ? ps.reduce((s,p)=>s+ovr(p),0)/ps.length : 3; });
+  const conceded = (m,i) => { const o = m.score.filter((_,j)=>j!==i); return o.length ? o.reduce((a,b)=>a+b,0)/o.length : 0; };
+  // dificultad: si tu equipo era más flojo que el rival, el resultado vale más (x0.5 a x1.6)
+  function difficulty(m, i){
+    const L = matchLvl(m), own = L[i], riv = L.filter((_,j)=>j!==i), rival = riv.reduce((a,b)=>a+b,0)/riv.length;
+    return Math.min(1.6, Math.max(.5, Math.round((1 + .6*(rival-own))*100)/100));
+  }
+  function matchPoints(m){
+    const out = {}, max = Math.max(...m.score), win1 = m.score.filter(s=>s===max).length===1;
+    m.teams.forEach((t,i) => {
+      const res = m.score[i]===max ? (win1?'G':'E') : 'P', dif = difficulty(m,i);
+      const kp = (m.keepers && m.keepers[i]) || keeperId(t), gc = conceded(m,i);
+      t.forEach(id => {
+        const goles = (m.goals||{})[id]||0, asist = (m.assists||{})[id]||0, mvp = m.mvp===id, isK = id===kp;
+        const r = res==='G' ? PTS.win*dif : res==='E' ? PTS.draw*dif : 0;
+        const k = isK ? (gc===0 ? PTS.valla : PTS.gc*gc) : 0;
+        const pts = PTS.pj + r + goles*PTS.gol + asist*PTS.asist + (mvp?PTS.mvp:0) + k;
+        out[id] = {pts:Math.round(pts*10)/10, res, dif, goles, asist, mvp, isK, gc:isK?gc:0, valla:isK&&gc===0};
+      });
+    });
+    return out;
+  }
+  const fpts = n => (Math.round(n*10)/10).toLocaleString('es-AR');
+
   function groupStats(g){
     const st = {};
-    const get = id => st[id] || (st[id] = {pj:0,pg:0,pe:0,pp:0,goles:0,mvp:0});
+    const get = id => st[id] || (st[id] = {pj:0,pg:0,pe:0,pp:0,goles:0,mvp:0,asist:0,pts:0,ataj:0,gc:0,vallas:0});
     (g.matches||[]).forEach(m => {
       const max = Math.max(...m.score), winners = m.score.filter(s=>s===max).length;
       m.teams.forEach((t,i) => t.forEach(id => {
@@ -856,7 +897,9 @@
         if(m.score[i]===max && winners===1) s.pg++; else if(m.score[i]===max) s.pe++; else s.pp++;
       }));
       Object.entries(m.goals||{}).forEach(([id,n]) => get(id).goles += n);
+      Object.entries(m.assists||{}).forEach(([id,n]) => get(id).asist += n);
       if(m.mvp) get(m.mvp).mvp++;
+      Object.entries(matchPoints(m)).forEach(([id,x]) => { const s = get(id); s.pts = Math.round((s.pts + x.pts)*10)/10; if(x.isK){ s.ataj++; s.gc += x.gc; if(x.valla) s.vallas++; } });
     });
     return st;
   }
@@ -878,6 +921,7 @@
         <div class="res">${m.teams.map((t,i)=>`<span class="side" style="background:${SIDES[i%SIDES.length].bg};color:${SIDES[i%SIDES.length].fg}">${SIDES[i%SIDES.length].name}</span><span class="n">${m.score[i]}</span>`).join('<span class="muted">–</span>')}</div>
         <div class="facts">
           ${topScorers(m)?`<span>${ic('ball','s-tir')}Goleador: <b>${topScorers(m)}</b></span>`:''}
+          ${topScorers({goals:m.assists})?`<span>${ic('pas','s-pas')}Asistidor: <b>${topScorers({goals:m.assists})}</b></span>`:''}
           ${m.mvp?`<span>${ic('trophy','s-vel')}Figura: <b>${esc(pname(m.mvp))}</b></span>`:''}
           ${perHead(m.pay, allIds(m.teams).length)?(()=>{ const ids = allIds(m.teams), pn = ids.filter(id=>m.pay.paid?.[id]).length; return `<span style="color:${pn===ids.length?'#4ade80':'#fbbf24'}">${ic('cash')}${pn===ids.length?'Todos pagaron':`Pagaron ${pn}/${ids.length} · faltan ${ARS(perHead(m.pay, ids.length)*(ids.length-pn))}`}</span>`; })():''}
         </div>
@@ -887,22 +931,40 @@
   }
   function renderRanking(g){
     const box = $('gt-ranking'), st = groupStats(g);
-    const rows = roster(g).filter(p=>!p.guest).map(p => ({p, s: st[p.id] || {pj:0,pg:0,pe:0,pp:0,goles:0,mvp:0}}));
-    const keys = {goles:'Goles', mvp:'Figuras', pg:'Ganados', pj:'Jugados'};
-    rows.sort((a,b)=> b.s[rkSort]-a.s[rkSort] || b.s.goles-a.s.goles || b.s.pg-a.s.pg || a.p.name.localeCompare(b.p.name));
+    const Z = {pj:0,pg:0,pe:0,pp:0,goles:0,mvp:0,asist:0,pts:0,ataj:0,gc:0,vallas:0};
+    const rows = roster(g).filter(p=>!p.guest).map(p => ({p, s: st[p.id] || Z}));
+    const keys = {pts:'Puntos', goles:'Goles', asist:'Asist.', mvp:'Figuras', pg:'Ganados', pj:'Jugados'};
+    rows.sort((a,b)=> b.s[rkSort]-a.s[rkSort] || b.s.pts-a.s.pts || b.s.goles-a.s.goles || a.p.name.localeCompare(b.p.name));
+    const third = ['mvp','pg','pj'].includes(rkSort) ? rkSort : 'asist';
+    const thirdV = s => third==='pg' ? (s.pj?Math.round(s.pg/s.pj*100)+'%':'0%') : s[third];
+    const thirdL = {asist:'asist.', mvp:'figura', pg:'ganados', pj:'jugados'}[third];
     const nm = (g.matches||[]).length;
     box.innerHTML = `<div class="card">
       <h2>Ranking · ${nm} partido${nm===1?'':'s'}</h2>
       <div class="chips">${Object.entries(keys).map(([k,n])=>`<button data-rk="${k}" class="${k===rkSort?'on':''}">${n}</button>`).join('')}</div>
+      <details class="ptsinfo"><summary>${ic('chart')} ¿Cómo se calculan los puntos?</summary>
+        <table>
+          <tr><td>Jugar el partido</td><td>+${PTS.pj}</td></tr>
+          <tr><td>Ganar <span class="muted">(× dificultad)</span></td><td>+${PTS.win}</td></tr>
+          <tr><td>Empatar <span class="muted">(× dificultad)</span></td><td>+${PTS.draw}</td></tr>
+          <tr><td>Cada gol</td><td>+${PTS.gol}</td></tr>
+          <tr><td>Cada asistencia</td><td>+${PTS.asist}</td></tr>
+          <tr><td>Figura del partido</td><td>+${PTS.mvp}</td></tr>
+          <tr><td>Arquero: valla invicta</td><td>+${PTS.valla}</td></tr>
+          <tr><td>Arquero: cada gol recibido</td><td>${String(PTS.gc).replace('.',',')}</td></tr>
+        </table>
+        <p><b>Dificultad según el equipo que te tocó:</b> se compara el nivel promedio de tu equipo con el del rival. Si te tocó el más flojo, ganar vale más (hasta ×1,6); si te tocó el más fuerte, vale menos (hasta ×0,5). Ej: tu equipo 3,2 vs rival 3,6 → ganar vale 3 × 1,24 = 3,7 puntos.</p>
+        <p>El arquero es el que marcaste con el guante al cargar el resultado (si no, el que juega de ARQ o el de mejor atajada).</p>
+      </details>
       ${!nm?'<div class="empty">Cuando cargues resultados vas a ver acá goleadores, figuras y quién gana más.</div>':
       `<ul class="list">${rows.map((r,i)=>`<li data-pf="${r.p.id}" style="cursor:pointer">
         <span class="rk ${i<3 && r.s[rkSort]>0?'top':''}">${i+1}</span>
         <div class="pinfo"><div class="pnm">${esc(r.p.name)}${posTag(r.p)}</div>
-        <div class="mini">${r.s.pj?`${r.s.pg}G · ${r.s.pe}E · ${r.s.pp}P`:'Sin partidos'}</div></div>
+        <div class="mini">${r.s.pj?`${r.s.pg}G · ${r.s.pe}E · ${r.s.pp}P${r.s.mvp?` · ${r.s.mvp} fig.`:''}${r.s.vallas?` · ${r.s.vallas} valla${r.s.vallas===1?'':'s'}`:''} · prom ${fpts(r.s.pts/r.s.pj)}`:'Sin partidos'}</div></div>
         <div class="rstats">
+          <div class="${rkSort==='pts'&&r.s.pts?'hl':''}"><b>${fpts(r.s.pts)}</b><small>puntos</small></div>
           <div class="${rkSort==='goles'&&r.s.goles?'hl':''}"><b>${r.s.goles}</b><small>goles</small></div>
-          <div class="${rkSort==='mvp'&&r.s.mvp?'hl':''}"><b>${r.s.mvp}</b><small>figura</small></div>
-          <div class="${(rkSort==='pg'||rkSort==='pj')&&r.s.pj?'hl':''}"><b>${r.s.pj?Math.round(r.s.pg/r.s.pj*100):0}%</b><small>${rkSort==='pj'?r.s.pj+' PJ':'ganados'}</small></div>
+          <div class="${rkSort===third&&r.s[third]?'hl':''}"><b>${thirdV(r.s)}</b><small>${thirdL}</small></div>
         </div></li>`).join('')}</ul>`}
     </div>`;
     box.querySelectorAll('[data-rk]').forEach(b => b.onclick = () => { rkSort = b.dataset.rk; renderRanking(g); });
@@ -1423,7 +1485,8 @@
       .map(m => {
         const ti = m.teams.findIndex(t=>t.includes(id)), max = Math.max(...m.score), win = m.score.filter(s=>s===max).length===1;
         const res = m.score[ti]===max ? (win?'G':'E') : 'P';
-        return {m, ti, res, goals:(m.goals||{})[id]||0, mvp:m.mvp===id};
+        const mp = matchPoints(m)[id] || {};
+        return {m, ti, res, goals:(m.goals||{})[id]||0, asist:(m.assists||{})[id]||0, mvp:m.mvp===id, pts:mp.pts||0, isK:mp.isK, gc:mp.gc, dif:mp.dif};
       });
   }
   function radarSVG(p){
@@ -1453,7 +1516,7 @@
     </div>`;
   }
   function renderProfile(){
-    const g = G(), p = P(state.pf), st = groupStats(g)[p.id] || {pj:0,pg:0,pe:0,pp:0,goles:0,mvp:0};
+    const g = G(), p = P(state.pf), st = groupStats(g)[p.id] || {pj:0,pg:0,pe:0,pp:0,goles:0,mvp:0,asist:0,pts:0,ataj:0,gc:0,vallas:0};
     setAdj(g); const adj = adjOf(p);
     const pm = playerMatches(g, p.id);
     $('hSub').textContent = `${g.name}${p.pos?' · '+POS[p.pos]:''}`;
@@ -1476,15 +1539,18 @@
       <div class="card">
         <h2>En ${esc(g.name)}</h2>
         <div class="kpis">
+          <div><b style="color:var(--gold)">${fpts(st.pts)}</b><small>puntos</small></div>
           <div><b>${st.pj}</b><small>jugados</small></div>
-          <div><b>${pct}%</b><small>ganados</small></div>
           <div><b>${st.goles}</b><small>goles</small></div>
-          <div><b>${st.mvp}</b><small>figura</small></div>
+          <div><b>${st.asist}</b><small>asist.</small></div>
         </div>
         ${st.pj ? `
         <div style="margin-top:12px">
           <div class="kv"><span>Últimos partidos</span><span class="streak">${pm.slice(0,5).map(x=>`<span class="rs rs-${x.res}" title="${x.res==='G'?'Ganó':x.res==='E'?'Empató':'Perdió'}">${x.res}</span>`).join('')}</span></div>
-          <div class="kv"><span>Ganados · empatados · perdidos</span><b>${st.pg} · ${st.pe} · ${st.pp}</b></div>
+          <div class="kv"><span>Puntos por partido</span><b>${fpts(st.pts/st.pj)}</b></div>
+          <div class="kv"><span>Ganados · empatados · perdidos</span><b>${st.pg} · ${st.pe} · ${st.pp} (${pct}%)</b></div>
+          <div class="kv"><span>Veces figura</span><b>${st.mvp}</b></div>
+          ${st.ataj?`<div class="kv"><span>Al arco</span><b>${st.ataj} partido${st.ataj===1?'':'s'} · ${st.vallas} valla${st.vallas===1?'':'s'} invicta${st.vallas===1?'':'s'} · ${fpts(st.gc)} goles recibidos</b></div>`:''}
           <div class="kv"><span>Promedio de gol</span><b>${(st.goles/st.pj).toFixed(2)} por partido</b></div>
           <div class="kv"><span>Más goles en un partido</span><b>${best}</b></div>
           <div class="kv"><span>Racha ganando</span><b>${run} seguido${run===1?'':'s'}</b></div>
@@ -1500,8 +1566,8 @@
           const s = SIDES[x.ti%SIDES.length], m = x.m;
           return `<li data-m="${m.id}"><span class="rs rs-${x.res}">${x.res}</span>
             <div class="pinfo"><div class="pnm">${m.teams.map((_,i)=>`${i===x.ti?'<b>':''}${m.score[i]}${i===x.ti?'</b>':''}`).join(' – ')} <span class="muted">con ${s.name}</span></div>
-            <div class="mini">${esc(fdate(m.date))}${m.place?' · '+esc(m.place):''}</div></div>
-            <span class="row" style="gap:6px;flex:none">${x.goals?`<span class="row" style="gap:3px">${ic('ball','s-tir')}<b>${x.goals}</b></span>`:''}${x.mvp?ic('trophy','s-vel'):''}</span></li>`; }).join('')}</ul></div>` : ''}
+            <div class="mini">${esc(fdate(m.date))}${m.place?' · '+esc(m.place):''}${x.isK?` · atajó${x.gc===0?' (valla invicta)':''}`:''}${x.res!=='P'?` · dificultad ×${String(x.dif).replace('.',',')}`:''}</div></div>
+            <span class="row" style="gap:6px;flex:none">${x.goals?`<span class="row" style="gap:3px">${ic('ball','s-tir')}<b>${x.goals}</b></span>`:''}${x.asist?`<span class="row" style="gap:3px">${ic('pas','s-pas')}<b>${x.asist}</b></span>`:''}${x.mvp?ic('trophy','s-vel'):''}<span class="ptag">+${fpts(x.pts)}</span></span></li>`; }).join('')}</ul></div>` : ''}
       ${others.length ? `<p class="muted center">También juega en: ${esc(others.join(', '))}</p>` : ''}`;
     $('pfEdit').onclick = () => openPlayer(p.id);
     $('pfPhoto').onclick = () => $('photoFile').click();
@@ -1577,7 +1643,7 @@
   function newMatchFromTeams(){
     const g = G(), existing = g.teams.matchId && (g.matches||[]).find(m=>m.id===g.teams.matchId);
     if(existing){ draft = JSON.parse(JSON.stringify(existing)); }
-    else draft = {id:null, date:todayISO(), place:g.lastPlace||'', format:g.teams.format, teams:g.teams.list.map(t=>[...t]), score:g.teams.list.map(()=>0), goals:{}, mvp:null, pay:JSON.parse(JSON.stringify(g.teams.pay||{total:g.price||0, paid:{}}))};
+    else draft = {id:null, date:todayISO(), place:g.lastPlace||'', format:g.teams.format, teams:g.teams.list.map(t=>[...t]), score:g.teams.list.map(()=>0), goals:{}, assists:{}, mvp:null, pay:JSON.parse(JSON.stringify(g.teams.pay||{total:g.price||0, paid:{}}))};
     draft.fromTeams = true; go('cargar');
   }
   const teamGoals = i => draft.teams[i].reduce((s,id)=>s+(draft.goals[id]||0),0);
@@ -1595,13 +1661,24 @@
     $('mScore').innerHTML = `<h2>Resultado</h2>` + (two
       ? `<div class="scorebox">${scoreTeam(0)}<span class="muted" style="font-size:1.6rem">–</span>${scoreTeam(1)}</div>`
       : `<div class="row wrap" style="justify-content:space-around;gap:16px">${draft.teams.map((_,i)=>scoreTeam(i)).join('')}</div>`);
-    $('mTeams').innerHTML = draft.teams.map((ids,i) => { const s = SIDES[i%SIDES.length]; return `<div class="team">
+    if(!draft.assists) draft.assists = {};
+    if(!draft.keepers) draft.keepers = draft.teams.map(keeperId);
+    $('mTeams').innerHTML = draft.teams.map((ids,i) => { const s = SIDES[i%SIDES.length]; return `<div class="team mrow">
       <div class="team-h" style="background:${s.bg};color:${s.fg}"><span>${s.name}</span><span>${teamGoals(i)} gol${teamGoals(i)===1?'':'es'} cargados</span></div>
       <ul>${ids.map(id => `<li>
         <button class="mvp ${draft.mvp===id?'on':''}" data-mvp="${id}" aria-label="Figura">${ic('trophy')}</button>
-        <div class="pinfo"><div class="pnm">${esc(pname(id))}${P(id)?posTag(P(id)):''}</div></div>
-        <span class="stepper"><button data-g="${id}" data-t="${i}" data-d="-1" aria-label="Restar gol">${ic('minus')}</button><b>${draft.goals[id]||0}</b><button data-g="${id}" data-t="${i}" data-d="1" aria-label="Sumar gol">${ic('ball')}</button></span>
+        <div class="pinfo"><div class="pnm">${esc(pname(id))}${P(id)?posTag(P(id)):''}</div>${draft.keepers[i]===id?`<div class="mini" style="color:#4ade80">Atajó · recibió ${fpts(conceded(draft,i))}</div>`:''}</div>
+        <button class="kp ${draft.keepers[i]===id?'on':''}" data-kp="${id}" data-t="${i}" aria-label="Atajó">${ic('ata')}</button>
+        <div class="ctrls">
+          <span class="row" style="gap:4px"><label>Goles</label><span class="stepper"><button data-g="${id}" data-t="${i}" data-d="-1" aria-label="Restar gol">${ic('minus')}</button><b>${draft.goals[id]||0}</b><button data-g="${id}" data-t="${i}" data-d="1" aria-label="Sumar gol">${ic('ball')}</button></span></span>
+          <span class="row" style="gap:4px"><label>Asist.</label><span class="stepper"><button data-a="${id}" data-d="-1" aria-label="Restar asistencia">${ic('minus')}</button><b>${draft.assists[id]||0}</b><button data-a="${id}" data-d="1" aria-label="Sumar asistencia">${ic('plus')}</button></span></span>
+        </div>
       </li>`).join('')}</ul></div>`; }).join('');
+    $('mTeams').querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+      const id = b.dataset.a; draft.assists[id] = Math.max(0, (draft.assists[id]||0) + +b.dataset.d);
+      if(!draft.assists[id]) delete draft.assists[id]; renderCargar();
+    });
+    $('mTeams').querySelectorAll('[data-kp]').forEach(b => b.onclick = () => { draft.keepers[+b.dataset.t] = b.dataset.kp; renderCargar(); });
     $('mScore').querySelectorAll('[data-sc]').forEach(b => b.onclick = () => {
       const i = +b.dataset.sc; draft.score[i] = Math.max(teamGoals(i), draft.score[i] + +b.dataset.d); renderCargar();
     });
@@ -1619,7 +1696,8 @@
   $('mPlace').oninput = e => draft.place = e.target.value.trim();
   function saveMatch(){
     const g = G(); g.matches = g.matches || [];
-    const m = {id:draft.id||uid(), created:draft.created||Date.now(), date:draft.date||todayISO(), place:draft.place||'', format:draft.format, teams:draft.teams, score:draft.score, goals:draft.goals, mvp:draft.mvp, pay:draft.pay};
+    const m = {id:draft.id||uid(), created:draft.created||Date.now(), date:draft.date||todayISO(), place:draft.place||'', format:draft.format, teams:draft.teams, score:draft.score, goals:draft.goals, assists:draft.assists||{}, keepers:draft.keepers, mvp:draft.mvp, pay:draft.pay,
+      lvl: draft.lvl || (setAdj(g), draft.teams.map(t => { const ps = t.map(P).filter(Boolean); return ps.length ? Math.round(ps.reduce((s,p)=>s+eff(p),0)/ps.length*100)/100 : 3; }))};
     const i = g.matches.findIndex(x=>x.id===m.id);
     if(i>=0) g.matches[i] = m; else g.matches.push(m);
     if(draft.fromTeams && g.teams){ g.teams.matchId = m.id; g.teams.pay = JSON.parse(JSON.stringify(m.pay||{total:0,paid:{}})); }
